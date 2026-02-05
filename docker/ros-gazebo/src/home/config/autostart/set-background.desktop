@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Set Desktop Background
+Comment=Applies dark background and disables desktop clutter
+Exec=/dockerstartup/set-background.sh
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
