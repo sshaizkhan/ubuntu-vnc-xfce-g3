@@ -271,6 +271,9 @@ RUN \
     && chown -R "${HEADLESS_USER_ID}:${HEADLESS_USER_GROUP_ID}" "${HOME}" \
     && chown -R "${HEADLESS_USER_ID}:${HEADLESS_USER_GROUP_ID}" "${STARTUPDIR}" \
     && echo "" >> "${HOME}"/.bashrc \
+    && echo "# Set DISPLAY for VNC (if not already set by host)" >> "${HOME}"/.bashrc \
+    && echo 'export DISPLAY="${DISPLAY:-:1}"' >> "${HOME}"/.bashrc \
+    && echo "" >> "${HOME}"/.bashrc \
     && echo "# ROS 2 Jazzy" >> "${HOME}"/.bashrc \
     && echo "source /opt/ros/jazzy/setup.bash" >> "${HOME}"/.bashrc
 
