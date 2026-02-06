@@ -243,6 +243,9 @@ WORKDIR "${HOME}"
 ### Copy startup scripts (from the shared source)
 COPY ./src/xfce-startup "${STARTUPDIR}"/
 
+### Override vnc_startup.rc with patched version supporting passwordless VNC
+COPY ./ros-gazebo/src/scripts/vnc_startup.rc "${STARTUPDIR}"/vnc_startup.rc
+
 ### Copy base home resources (.bashrc, etc.)
 COPY ./src/home "${HOME}"/
 
