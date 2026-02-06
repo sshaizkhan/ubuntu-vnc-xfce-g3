@@ -12,13 +12,13 @@
 ###   docker build -f Dockerfile.ros-gazebo -t ros-gazebo-vnc .
 ###
 ### Run (VNC mode - default):
-###   docker run -d -p 5901:5901 -p 6901:6901 ros-gazebo-vnc
+###   docker run -d -p 5901:5901 -p 6901:6901 --hostname robot ros-gazebo-vnc
 ###   Connect via VNC client: localhost:5901 (password: bot)
 ###   Connect via browser:    http://localhost:6901
 ###
 ### Run (Host X11 mode):
 ###   xhost +local:docker
-###   docker run -it --rm \
+###   docker run -it --rm --hostname robot \
 ###     -e DISPLAY=$DISPLAY \
 ###     -v /tmp/.X11-unix:/tmp/.X11-unix \
 ###     ros-gazebo-vnc
