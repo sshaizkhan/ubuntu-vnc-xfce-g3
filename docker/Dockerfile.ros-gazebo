@@ -16,12 +16,12 @@
 ###
 ### Custom background image:
 ###   docker run -d -p 5901:5901 -p 6901:6901 \
-###     -e CUSTOM_BACKGROUND=/home/headless/bg.png \
-###     -v /path/to/your/image.png:/home/headless/bg.png:ro \
+###     -e CUSTOM_BACKGROUND=/home/bot/bg.png \
+###     -v /path/to/your/image.png:/home/bot/bg.png:ro \
 ###     ros-gazebo-vnc
 ###
 ### Connect:
-###   VNC client:  localhost:5901  (password: headless)
+###   VNC client:  localhost:5901  (no password)
 ###   Web browser:  http://localhost:6901
 ###############################################################################
 
@@ -29,11 +29,11 @@ ARG BASEIMAGE=ubuntu
 ARG BASETAG=24.04
 
 ARG ARG_HEADLESS_USER_ID=1001
-ARG ARG_HEADLESS_USER_NAME=headless
+ARG ARG_HEADLESS_USER_NAME=bot
 ARG ARG_HEADLESS_USER_GROUP_ID=1001
-ARG ARG_HEADLESS_USER_GROUP_NAME=headless
-ARG ARG_SUDO_INITIAL_PW=headless
-ARG ARG_HOME=/home/headless
+ARG ARG_HEADLESS_USER_GROUP_NAME=bot
+ARG ARG_SUDO_INITIAL_PW=
+ARG ARG_HOME=/home/bot
 
 
 ###############
@@ -112,7 +112,7 @@ ENV \
     FEATURES_VNC=1 \
     VNC_COL_DEPTH="${ARG_VNC_COL_DEPTH:-24}" \
     VNC_PORT="${ARG_VNC_PORT:-5901}" \
-    VNC_PW="${ARG_VNC_PW:-headless}" \
+    VNC_PW="${ARG_VNC_PW:-}" \
     VNC_RESOLUTION="${ARG_VNC_RESOLUTION:-1920x1080}" \
     VNC_VIEW_ONLY="${ARG_VNC_VIEW_ONLY:-false}"
 
@@ -248,14 +248,14 @@ COPY ./ros-gazebo/src/scripts/set-background.sh "${STARTUPDIR}"/set-background.s
 ### Create empty Desktop directory (no icons/shortcuts)
 RUN mkdir -p "${HOME}"/Desktop
 
-### Setup user, permissions, and ROS 2 environment
+### Setup user with passwordless sudo, permissions, and ROS 2 environment
 RUN \
     chmod 666 /etc/passwd /etc/group \
     && echo "${HEADLESS_USER_GROUP_NAME}:x:${HEADLESS_USER_GROUP_ID}:" >> /etc/group \
     && echo "${HEADLESS_USER_NAME}:x:${HEADLESS_USER_ID}:${HEADLESS_USER_GROUP_ID}:Default:${HOME}:/bin/bash" >> /etc/passwd \
-    && echo "${HEADLESS_USER_NAME}  ALL=(ALL:ALL) ALL" | sudo tee /etc/sudoers.d/"${HEADLESS_USER_NAME}" \
-    && echo "${ARG_SUDO_INITIAL_PW:-headless}" > "${STARTUPDIR}"/.initial_sudo_password \
-    && echo "${HEADLESS_USER_NAME}:$(cat ${STARTUPDIR}/.initial_sudo_password)" | chpasswd \
+    && echo "${HEADLESS_USER_NAME}  ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/"${HEADLESS_USER_NAME}" \
+    && touch "${STARTUPDIR}"/.initial_sudo_password \
+    && passwd -d "${HEADLESS_USER_NAME}" \
     && chmod +x "${STARTUPDIR}"/set_user_permissions.sh \
     && chmod +x "${STARTUPDIR}"/set-background.sh \
     && "${STARTUPDIR}"/set_user_permissions.sh "${STARTUPDIR}" "${HOME}" \
