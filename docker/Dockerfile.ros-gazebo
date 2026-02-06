@@ -11,18 +11,23 @@
 ### Build (from the 'docker/' directory):
 ###   docker build -f Dockerfile.ros-gazebo -t ros-gazebo-vnc .
 ###
-### Run:
+### Run (VNC mode - default):
 ###   docker run -d -p 5901:5901 -p 6901:6901 ros-gazebo-vnc
+###   Connect via VNC client: localhost:5901 (no password)
+###   Connect via browser:    http://localhost:6901
 ###
-### Custom background image:
+### Run (Host X11 mode):
+###   xhost +local:docker
+###   docker run -it --rm \
+###     -e DISPLAY=$DISPLAY \
+###     -v /tmp/.X11-unix:/tmp/.X11-unix \
+###     ros-gazebo-vnc
+###
+### Custom background image (VNC mode):
 ###   docker run -d -p 5901:5901 -p 6901:6901 \
 ###     -e CUSTOM_BACKGROUND=/home/bot/bg.png \
 ###     -v /path/to/your/image.png:/home/bot/bg.png:ro \
 ###     ros-gazebo-vnc
-###
-### Connect:
-###   VNC client:  localhost:5901  (no password)
-###   Web browser:  http://localhost:6901
 ###############################################################################
 
 ARG BASEIMAGE=ubuntu
@@ -107,10 +112,12 @@ ARG ARG_VNC_PW
 ARG ARG_VNC_RESOLUTION
 ARG ARG_VNC_VIEW_ONLY
 
+### Note: DISPLAY is NOT set here - the startup-wrapper.sh will set it
+### to :1 for VNC mode, or use the host DISPLAY if provided
 ENV \
-    DISPLAY="${ARG_VNC_DISPLAY:-:1}" \
     FEATURES_VNC=1 \
     VNC_COL_DEPTH="${ARG_VNC_COL_DEPTH:-24}" \
+    VNC_DISPLAY="${ARG_VNC_DISPLAY:-:1}" \
     VNC_PORT="${ARG_VNC_PORT:-5901}" \
     VNC_PW="${ARG_VNC_PW:-}" \
     VNC_RESOLUTION="${ARG_VNC_RESOLUTION:-1920x1080}" \
@@ -242,7 +249,8 @@ COPY ./src/home "${HOME}"/
 ### Copy minimal XFCE configuration (no panels, no desktop icons, dark background)
 COPY ./ros-gazebo/src/home/config "${HOME}"/.config/
 
-### Copy background setup script
+### Copy startup wrapper and background setup scripts
+COPY ./ros-gazebo/src/scripts/startup-wrapper.sh "${STARTUPDIR}"/startup-wrapper.sh
 COPY ./ros-gazebo/src/scripts/set-background.sh "${STARTUPDIR}"/set-background.sh
 
 ### Create empty Desktop directory (no icons/shortcuts)
@@ -257,6 +265,7 @@ RUN \
     && touch "${STARTUPDIR}"/.initial_sudo_password \
     && passwd -d "${HEADLESS_USER_NAME}" \
     && chmod +x "${STARTUPDIR}"/set_user_permissions.sh \
+    && chmod +x "${STARTUPDIR}"/startup-wrapper.sh \
     && chmod +x "${STARTUPDIR}"/set-background.sh \
     && "${STARTUPDIR}"/set_user_permissions.sh "${STARTUPDIR}" "${HOME}" \
     && echo "" >> "${HOME}"/.bashrc \
@@ -268,4 +277,4 @@ USER "${HEADLESS_USER_ID}"
 ### Initialize rosdep for user
 RUN rosdep update || true
 
-ENTRYPOINT [ "/usr/bin/tini", "--", "/dockerstartup/startup.sh" ]
+ENTRYPOINT [ "/usr/bin/tini", "--", "/dockerstartup/startup-wrapper.sh" ]
