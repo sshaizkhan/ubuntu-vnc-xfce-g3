@@ -265,9 +265,9 @@ RUN \
     && touch "${STARTUPDIR}"/.initial_sudo_password \
     && passwd -d "${HEADLESS_USER_NAME}" \
     && chmod +x "${STARTUPDIR}"/set_user_permissions.sh \
-    && chmod +x "${STARTUPDIR}"/startup-wrapper.sh \
-    && chmod +x "${STARTUPDIR}"/set-background.sh \
     && "${STARTUPDIR}"/set_user_permissions.sh "${STARTUPDIR}" "${HOME}" \
+    && chmod 755 "${STARTUPDIR}"/startup-wrapper.sh \
+    && chmod 755 "${STARTUPDIR}"/set-background.sh \
     && echo "" >> "${HOME}"/.bashrc \
     && echo "# ROS 2 Jazzy" >> "${HOME}"/.bashrc \
     && echo "source /opt/ros/jazzy/setup.bash" >> "${HOME}"/.bashrc
