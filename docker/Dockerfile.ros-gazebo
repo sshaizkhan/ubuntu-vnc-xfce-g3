@@ -1,0 +1,288 @@
+###############################################################################
+### Minimal VNC Desktop with ROS 2 Jazzy + Gazebo Harmonic
+###
+### Features:
+###   - Ubuntu 24.04 (Noble)
+###   - Minimal XFCE desktop (no panels, no desktop icons, dark background)
+###   - TigerVNC server + noVNC web client
+###   - ROS 2 Jazzy Desktop
+###   - Gazebo Harmonic + ros_gz bridge
+###
+### Build (from the 'docker/' directory):
+###   docker build -f Dockerfile.ros-gazebo -t ros-gazebo-vnc .
+###
+### Run (VNC mode - default):
+###   docker run -d -p 5901:5901 -p 6901:6901 --hostname robot ros-gazebo-vnc
+###   Connect via VNC client: localhost:5901 (password: bot)
+###   Connect via browser:    http://localhost:6901
+###
+### Run (Host X11 mode):
+###   xhost +local:docker
+###   docker run -it --rm --hostname robot \
+###     -e DISPLAY=$DISPLAY \
+###     -v /tmp/.X11-unix:/tmp/.X11-unix \
+###     ros-gazebo-vnc
+###
+### Custom background image (VNC mode):
+###   docker run -d -p 5901:5901 -p 6901:6901 \
+###     -e CUSTOM_BACKGROUND=/home/bot/bg.png \
+###     -v /path/to/your/image.png:/home/bot/bg.png:ro \
+###     ros-gazebo-vnc
+###############################################################################
+
+ARG BASEIMAGE=ubuntu
+ARG BASETAG=24.04
+
+ARG ARG_HEADLESS_USER_ID=1001
+ARG ARG_HEADLESS_USER_NAME=bot
+ARG ARG_HEADLESS_USER_GROUP_ID=1001
+ARG ARG_HEADLESS_USER_GROUP_NAME=bot
+ARG ARG_SUDO_INITIAL_PW=
+ARG ARG_HOME=/home/bot
+
+
+###############
+### stage_base
+###############
+
+FROM ${BASEIMAGE}:${BASETAG} AS stage_base
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+        curl \
+        gettext-base \
+        gpg \
+        jq \
+        lsb-release \
+        nano \
+        psmisc \
+        software-properties-common \
+        sudo \
+        tini \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
+
+
+###################
+### stage_xserver
+###################
+
+FROM stage_base AS stage_xserver
+
+ENV NO_AT_BRIDGE=1
+
+RUN apt-get update && apt-get install -y \
+        dbus-x11 \
+        xauth \
+        xinit \
+        x11-xserver-utils \
+        xdg-utils \
+        libxshmfence1 \
+        libxcvt0 \
+        libgbm1 \
+    && rm -rf /var/lib/apt/lists/*
+
+
+############################
+### stage_xfce (minimal)
+############################
+
+FROM stage_xserver AS stage_xfce
+
+### Install only essential XFCE components - no panel, no thunar, no extras
+RUN apt-get update && apt-get install -y \
+        xfwm4 \
+        xfdesktop4 \
+        xfce4-session \
+        xfce4-settings \
+        xfce4-terminal \
+    && rm -rf /var/lib/apt/lists/*
+
+
+#############
+### stage_vnc
+#############
+
+FROM stage_xfce AS stage_vnc
+ARG ARG_VNC_COL_DEPTH
+ARG ARG_VNC_DISPLAY
+ARG ARG_VNC_PORT
+ARG ARG_VNC_PW
+ARG ARG_VNC_RESOLUTION
+ARG ARG_VNC_VIEW_ONLY
+
+### Note: DISPLAY is NOT set here - the startup-wrapper.sh will set it
+### to :1 for VNC mode, or use the host DISPLAY if provided
+ENV \
+    FEATURES_VNC=1 \
+    VNC_COL_DEPTH="${ARG_VNC_COL_DEPTH:-24}" \
+    VNC_DISPLAY="${ARG_VNC_DISPLAY:-:1}" \
+    VNC_PORT="${ARG_VNC_PORT:-5901}" \
+    VNC_PW="${ARG_VNC_PW:-bot}" \
+    VNC_RESOLUTION="${ARG_VNC_RESOLUTION:-1920x1080}" \
+    VNC_VIEW_ONLY="${ARG_VNC_VIEW_ONLY:-false}"
+
+### Install TigerVNC - auto-detect architecture
+RUN TIGERVNC_VERSION="1.15.0" \
+    && ARCH=$(uname -m) \
+    && wget --show-progress --progress=bar:force:noscroll \
+        -q https://sourceforge.net/projects/tigervnc/files/stable/${TIGERVNC_VERSION}/tigervnc-${TIGERVNC_VERSION}.${ARCH}.tar.gz \
+        -O /tmp/tigervnc.tar.gz \
+    && tar xzf /tmp/tigervnc.tar.gz --strip 1 -C / \
+    && rm /tmp/tigervnc.tar.gz \
+    && ln -s /usr/libexec/vncserver /usr/bin/vncserver \
+    && sed -i 's/exec(@cmd);/print "@cmd";\nexec(@cmd);/g' /usr/libexec/vncserver
+
+EXPOSE ${VNC_PORT}
+
+
+###############
+### stage_novnc
+###############
+
+FROM stage_vnc AS stage_novnc
+ARG ARG_NOVNC_PORT
+
+ENV \
+    FEATURES_NOVNC=1 \
+    NOVNC_HOME="/usr/libexec/noVNCdim" \
+    NOVNC_PORT="${ARG_NOVNC_PORT:-6901}"
+
+RUN NOVNC_VERSION="1.6.0" \
+    && WEBSOCKIFY_VERSION="0.13.0" \
+    && apt-get update && apt-get install -y python3-numpy \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p "${NOVNC_HOME}"/utils/websockify \
+    && wget --show-progress --progress=bar:force:noscroll \
+        -q https://github.com/novnc/noVNC/archive/v${NOVNC_VERSION}.tar.gz \
+        -O /tmp/novnc.tar.gz \
+    && wget --show-progress --progress=bar:force:noscroll \
+        -q https://github.com/novnc/websockify/archive/v${WEBSOCKIFY_VERSION}.tar.gz \
+        -O /tmp/websockify.tar.gz \
+    && tar xzf /tmp/novnc.tar.gz --strip 1 -C "${NOVNC_HOME}" \
+    && tar xzf /tmp/websockify.tar.gz --strip 1 -C "${NOVNC_HOME}"/utils/websockify \
+    && chmod 755 -v "${NOVNC_HOME}"/utils/novnc_proxy \
+    && rm /tmp/novnc.tar.gz /tmp/websockify.tar.gz
+
+### noVNC landing page
+RUN echo \
+"<!DOCTYPE html>\n\
+<html>\n\
+    <head>\n\
+        <title>noVNC</title>\n\
+        <meta charset=\"utf-8\"/>\n\
+        <meta http-equiv=\"refresh\" content=\"10; url='vnc.html'\" />\n\
+    </head>\n\
+    <body>\n\
+    <p><a href=\"vnc_lite.html\">noVNC Lite Client</a></p>\n\
+    <p><a href=\"vnc.html\">noVNC Full Client</a></p>\n\
+    <p>Full Client will start automatically in 10 seconds...</p>\n\
+    </body>\n\
+</html>" \
+> "${NOVNC_HOME}"/index.html
+
+EXPOSE ${NOVNC_PORT}
+
+
+#########################
+### stage_ros_gazebo
+#########################
+
+FROM stage_novnc AS stage_ros_gazebo
+
+### Add ROS 2 Jazzy repository
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+        -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
+        | tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+### Add Gazebo Harmonic repository
+RUN wget -q https://packages.osrfoundation.org/gazebo.gpg \
+        -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
+        | tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
+
+### Install ROS 2 Jazzy Desktop + Gazebo Harmonic + bridge
+RUN apt-get update && apt-get install -y \
+        ros-jazzy-desktop \
+        ros-jazzy-ros-gz \
+        gz-harmonic \
+        python3-colcon-common-extensions \
+        python3-rosdep \
+    && apt-get -y autoremove \
+    && rm -rf /var/lib/apt/lists/*
+
+### Initialize rosdep (system-level)
+RUN rosdep init || true
+
+
+###############
+### stage_final
+###############
+
+FROM stage_ros_gazebo AS stage_final
+ARG ARG_HEADLESS_USER_ID
+ARG ARG_HEADLESS_USER_NAME
+ARG ARG_HEADLESS_USER_GROUP_ID
+ARG ARG_HEADLESS_USER_GROUP_NAME
+ARG ARG_HOME
+ARG ARG_SUDO_INITIAL_PW
+
+ENV \
+    HEADLESS_USER_ID="${ARG_HEADLESS_USER_ID}" \
+    HEADLESS_USER_NAME="${ARG_HEADLESS_USER_NAME}" \
+    HEADLESS_USER_GROUP_ID="${ARG_HEADLESS_USER_GROUP_ID}" \
+    HEADLESS_USER_GROUP_NAME="${ARG_HEADLESS_USER_GROUP_NAME}" \
+    HOME="${ARG_HOME:-/home/${ARG_HEADLESS_USER_NAME}}" \
+    FEATURES_VERSION_STICKER=1 \
+    STARTUPDIR="/dockerstartup"
+
+WORKDIR "${HOME}"
+
+### Copy startup scripts (from the shared source)
+COPY ./src/xfce-startup "${STARTUPDIR}"/
+
+### Override vnc_startup.rc with patched version supporting passwordless VNC
+COPY ./ros-gazebo/src/scripts/vnc_startup.rc "${STARTUPDIR}"/vnc_startup.rc
+
+### Copy base home resources (.bashrc, etc.)
+COPY ./src/home "${HOME}"/
+
+### Copy minimal XFCE configuration (no panels, no desktop icons, dark background)
+COPY ./ros-gazebo/src/home/config "${HOME}"/.config/
+
+### Copy startup wrapper and background setup scripts
+COPY ./ros-gazebo/src/scripts/startup-wrapper.sh "${STARTUPDIR}"/startup-wrapper.sh
+COPY ./ros-gazebo/src/scripts/set-background.sh "${STARTUPDIR}"/set-background.sh
+
+### Create empty Desktop directory (no icons/shortcuts)
+RUN mkdir -p "${HOME}"/Desktop
+
+### Setup user with passwordless sudo, permissions, and ROS 2 environment
+RUN \
+    chmod 666 /etc/passwd /etc/group \
+    && echo "${HEADLESS_USER_GROUP_NAME}:x:${HEADLESS_USER_GROUP_ID}:" >> /etc/group \
+    && echo "${HEADLESS_USER_NAME}:x:${HEADLESS_USER_ID}:${HEADLESS_USER_GROUP_ID}:Default:${HOME}:/bin/bash" >> /etc/passwd \
+    && echo "${HEADLESS_USER_NAME}  ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/"${HEADLESS_USER_NAME}" \
+    && touch "${STARTUPDIR}"/.initial_sudo_password \
+    && passwd -d "${HEADLESS_USER_NAME}" \
+    && chmod +x "${STARTUPDIR}"/set_user_permissions.sh \
+    && "${STARTUPDIR}"/set_user_permissions.sh "${STARTUPDIR}" "${HOME}" \
+    && chmod 755 "${STARTUPDIR}"/startup-wrapper.sh \
+    && chmod 755 "${STARTUPDIR}"/set-background.sh \
+    && chown -R "${HEADLESS_USER_ID}:${HEADLESS_USER_GROUP_ID}" "${HOME}" \
+    && chown -R "${HEADLESS_USER_ID}:${HEADLESS_USER_GROUP_ID}" "${STARTUPDIR}" \
+    && echo "" >> "${HOME}"/.bashrc \
+    && echo "# Set DISPLAY for VNC (if not already set by host)" >> "${HOME}"/.bashrc \
+    && echo 'export DISPLAY="${DISPLAY:-:1}"' >> "${HOME}"/.bashrc \
+    && echo "" >> "${HOME}"/.bashrc \
+    && echo "# ROS 2 Jazzy" >> "${HOME}"/.bashrc \
+    && echo "source /opt/ros/jazzy/setup.bash" >> "${HOME}"/.bashrc
+
+USER "${HEADLESS_USER_ID}"
+
+### Initialize rosdep for user
+RUN rosdep update || true
+
+ENTRYPOINT [ "/usr/bin/tini", "--", "/dockerstartup/startup-wrapper.sh" ]
