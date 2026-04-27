@@ -1,20 +1,27 @@
 #!/bin/bash
 ###
-### Wrapper script that auto-detects display mode:
-###   - If DISPLAY is set (host X11): skip VNC, use host display
-###   - If DISPLAY is not set: start VNC server on VNC_DISPLAY (default :1)
+### Wrapper script that starts VNC always, while also preserving host X11 display.
+###
+### Display modes:
+###   DISPLAY=:10         -> VNC/noVNC (ports 5900/6901) - always active
+###   HOST_DISPLAY=:0     -> host X11 (set when container is launched with -e DISPLAY)
 ###
 ### Usage:
-###   VNC mode (default):   docker run -p 5901:5901 -p 6901:6901 image
-###   Host X11 mode:        docker run -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix image
+###   VNC only:      docker run -p 5900:5900 -p 6901:6901 image
+###   VNC + host X11: docker run -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix \
+###                              -p 5900:5900 -p 6901:6901 image
+###
+### Inside the container:
+###   DISPLAY=$DISPLAY rviz2          -> renders in VNC
+###   DISPLAY=$HOST_DISPLAY rviz2     -> renders on host physical monitor
 ###
 
-if [ -z "$DISPLAY" ]; then
-    ### No display provided - start VNC server
-    export DISPLAY="${VNC_DISPLAY:-:1}"
-    exec /dockerstartup/startup.sh "$@"
-else
-    ### External display provided (host X11) - skip VNC
-    echo "Using host display: $DISPLAY (VNC server disabled)"
-    exec /dockerstartup/startup.sh --skip-vnc "$@"
+if [ -n "$DISPLAY" ]; then
+    ### Save host display before overriding
+    export HOST_DISPLAY="${DISPLAY}"
+    echo "Host display saved as HOST_DISPLAY=${HOST_DISPLAY}"
 fi
+
+### Always start VNC on :10 (avoids collision with host X sockets bind-mounted via /tmp/.X11-unix)
+export DISPLAY="${VNC_DISPLAY:-:10}"
+exec /dockerstartup/startup.sh "$@"

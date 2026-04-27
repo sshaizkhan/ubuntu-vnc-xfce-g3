@@ -12,8 +12,8 @@
 ###   docker build -f Dockerfile.ros-gazebo -t ros-gazebo-vnc .
 ###
 ### Run (VNC mode - default):
-###   docker run -d -p 5901:5901 -p 6901:6901 --hostname robot ros-gazebo-vnc
-###   Connect via VNC client: localhost:5901 (password: bot)
+###   docker run -d -p 5900:5900 -p 6901:6901 --hostname robot ros-gazebo-vnc
+###   Connect via VNC client: localhost:5900 (password: bot)
 ###   Connect via browser:    http://localhost:6901
 ###
 ### Run (Host X11 mode):
@@ -24,7 +24,7 @@
 ###     ros-gazebo-vnc
 ###
 ### Custom background image (VNC mode):
-###   docker run -d -p 5901:5901 -p 6901:6901 \
+###   docker run -d -p 5900:5900 -p 6901:6901 \
 ###     -e CUSTOM_BACKGROUND=/home/bot/bg.png \
 ###     -v /path/to/your/image.png:/home/bot/bg.png:ro \
 ###     ros-gazebo-vnc
@@ -112,13 +112,14 @@ ARG ARG_VNC_PW
 ARG ARG_VNC_RESOLUTION
 ARG ARG_VNC_VIEW_ONLY
 
-### Note: DISPLAY is NOT set here - the startup-wrapper.sh will set it
-### to :1 for VNC mode, or use the host DISPLAY if provided
+### Note: DISPLAY is NOT set here - the startup-wrapper.sh will set it.
+### VNC_DISPLAY uses :10 to avoid colliding with host X sockets
+### that are bind-mounted into the container via /tmp/.X11-unix.
 ENV \
     FEATURES_VNC=1 \
     VNC_COL_DEPTH="${ARG_VNC_COL_DEPTH:-24}" \
-    VNC_DISPLAY="${ARG_VNC_DISPLAY:-:1}" \
-    VNC_PORT="${ARG_VNC_PORT:-5901}" \
+    VNC_DISPLAY="${ARG_VNC_DISPLAY:-:10}" \
+    VNC_PORT="${ARG_VNC_PORT:-5900}" \
     VNC_PW="${ARG_VNC_PW:-bot}" \
     VNC_RESOLUTION="${ARG_VNC_RESOLUTION:-1920x1080}" \
     VNC_VIEW_ONLY="${ARG_VNC_VIEW_ONLY:-false}"
