@@ -257,6 +257,10 @@ COPY ./ros-gazebo/src/home/config "${HOME}"/.config/
 COPY ./ros-gazebo/src/scripts/startup-wrapper.sh "${STARTUPDIR}"/startup-wrapper.sh
 COPY ./ros-gazebo/src/scripts/set-background.sh "${STARTUPDIR}"/set-background.sh
 
+### Bake in the default wallpaper
+COPY ./assets/background.png "${HOME}"/background.png
+ENV CUSTOM_BACKGROUND="${HOME}/background.png"
+
 ### Create empty Desktop directory (no icons/shortcuts)
 RUN mkdir -p "${HOME}"/Desktop
 
